@@ -3,12 +3,15 @@ package fr.syberalexis.ogametimecalc.service;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 import org.springframework.stereotype.Component;
 
 import fr.syberalexis.ogametimecalc.model.Coordinate;
 import fr.syberalexis.ogametimecalc.model.Fleet;
+import fr.syberalexis.ogametimecalc.model.Movement;
+import fr.syberalexis.ogametimecalc.model.MovementType;
 import fr.syberalexis.ogametimecalc.model.ServerInfo;
 import fr.syberalexis.ogametimecalc.model.UserInfo;
 
@@ -70,5 +73,46 @@ public class FleetService {
         }
 
         return possiblePercentage;
+    }
+
+
+    public LocalDateTime calculateReturn(ServerInfo serverInfo, Fleet fleet, Movement movement, LocalDateTime backTime) {
+        if (movement == null || (movement.getDepartureTime() == null && movement.getArrivalTime() == null)) {
+            throw new IllegalArgumentException("Impossible to calculate return less departure or arrival time !");
+        }
+
+        if (MovementType.PARK.equals(movement.getType()) && backTime == null) {
+            return null;
+        }
+
+        int additionnalHour = 0;
+        if (List.of(MovementType.EXPEDITION, MovementType.FRIEND_PARK).contains(movement.getType())) {
+            additionnalHour = movement.getAdditionnalHour();
+        }
+
+        Duration movementDuration = calculateFleetDuration(serverInfo, fleet, movement.getSource(), movement.getDestination(), movement.getPercentage());
+        
+        LocalDateTime time = null; 
+        if (backTime == null) {
+            if (movement.getArrivalTime() != null) {
+                time = movement.getArrivalTime();
+            } else {
+                time = movement.getDepartureTime().plus(movementDuration);
+            }
+            if (additionnalHour > 0) {
+                time = time.plusHours(additionnalHour);
+            }
+        } else {
+            time = backTime;
+            LocalDateTime departureTime = movement.getDepartureTime();
+            if (departureTime == null) {
+                departureTime = movement.getArrivalTime().minus(movementDuration);
+            }
+            if (departureTime.plus(movementDuration).isAfter(backTime)) {
+                movementDuration = Duration.between(departureTime, backTime);
+            }
+        }
+
+        return time.plus(movementDuration);
     }
 }
